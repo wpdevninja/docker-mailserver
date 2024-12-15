@@ -8,11 +8,11 @@ services:
     # More information about the mail-server ports:
     # https://docker-mailserver.github.io/docker-mailserver/latest/config/security/understanding-the-ports/
     ports:
-      - "25:25"    # SMTP  (explicit TLS => STARTTLS, Authentication is DISABLED => use port 465/587 instead)
-      - "143:143"  # IMAP4 (explicit TLS => STARTTLS)
-      - "465:465"  # ESMTP (implicit TLS)
-      - "587:587"  # ESMTP (explicit TLS => STARTTLS)
-      - "993:993"  # IMAP4 (implicit TLS)
+      - "25:25" # SMTP  (explicit TLS => STARTTLS, Authentication is DISABLED => use port 465/587 instead)
+      - "143:143" # IMAP4 (explicit TLS => STARTTLS)
+      - "465:465" # ESMTP (implicit TLS)
+      - "587:587" # ESMTP (explicit TLS => STARTTLS)
+      - "993:993" # IMAP4 (implicit TLS)
     volumes:
       - ./docker-data/dms/mail-data/:/var/mail/
       - ./docker-data/dms/mail-state/:/var/mail-state/
@@ -28,3 +28,38 @@ services:
       test: "ss --listening --tcp | grep -P 'LISTEN.+:smtp' || exit 1"
       timeout: 3s
       retries: 0
+  reverse-proxy:
+    image: docker.io/traefik:latest # 2.10 / 3.0
+    # CAUTION: In production you should configure the Docker API endpoint securely:
+    # https://doc.traefik.io/traefik/providers/docker/#docker-api-access
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command:
+      # Docker provider config:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      # DMS ports you want to proxy:
+      - --entryPoints.mail-smtp.address=:25
+      - --entryPoints.mail-submission.address=:587
+      - --entryPoints.mail-submissions.address=:465
+      - --entryPoints.mail-imap.address=:143
+      - --entryPoints.mail-imaps.address=:993
+      - --entryPoints.mail-pop3.address=:110
+      - --entryPoints.mail-pop3s.address=:995
+      - --entryPoints.mail-managesieve.address=:4190
+    # Publish external access ports mapped to traefik entrypoint ports:
+    ports:
+      - "25:25"
+      - "587:587"
+      - "465:465"
+      - "143:143"
+      - "993:993"
+      - "110:110"
+      - "995:995"
+      - "4190:4190"
+    # An IP is assigned here for other services (Dovecot) to trust for PROXY protocol:
+    networks:
+      default:
+        ipv4_address: 172.16.42.2
+    restart: always
+
